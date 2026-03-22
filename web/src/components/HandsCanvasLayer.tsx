@@ -1,18 +1,24 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { drawAllHandsStylized } from "../lib/drawStylizedHands";
 import type { FrameMessage } from "../protocol";
+import { useThemeStore } from "../store/themeStore";
 
 type Props = {
   frame: FrameMessage | null;
+  /** e.g. `hands-canvas-layer--viewport` for full-window overlay above top chrome */
+  className?: string;
 };
 
 /**
- * Full tabletop layer: hands in camera space (letterboxed), drawn above the deck grid (z-index).
+ * Letterboxed hand silhouettes in camera space. Use the viewport variant so strokes sit above
+ * the top bar (calibration / theme); `pointer-events: none` keeps controls clickable underneath.
  */
-export function HandsCanvasLayer({ frame }: Props) {
+export function HandsCanvasLayer({ frame, className }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [layoutGen, setLayoutGen] = useState(0);
+  const handLeftHex = useThemeStore((s) => s.handLeftHex);
+  const handRightHex = useThemeStore((s) => s.handRightHex);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -46,11 +52,16 @@ export function HandsCanvasLayer({ frame }: Props) {
 
     const iw = frame.img_width > 0 ? frame.img_width : 16;
     const ih = frame.img_height > 0 ? frame.img_height : 9;
-    drawAllHandsStylized(ctx, frame.hands, w, h, iw, ih);
-  }, [frame, layoutGen]);
+    drawAllHandsStylized(ctx, frame.hands, w, h, iw, ih, {
+      left: handLeftHex,
+      right: handRightHex,
+    });
+  }, [frame, layoutGen, handLeftHex, handRightHex]);
+
+  const rootClass = ["hands-canvas-layer", className].filter(Boolean).join(" ");
 
   return (
-    <div ref={wrapRef} className="hands-canvas-layer" aria-hidden>
+    <div ref={wrapRef} className={rootClass} aria-hidden>
       <canvas ref={canvasRef} className="hands-canvas-layer__canvas" />
     </div>
   );

@@ -1,9 +1,6 @@
 import { HAND_OUTLINE_ORDER } from "./handConnections";
 import type { HandPayload } from "../protocol";
 
-const LEFT = "#5eead4";
-const RIGHT = "#e879f9";
-
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace("#", "");
   if (h.length !== 6) return `rgba(255,255,255,${alpha})`;
@@ -126,10 +123,6 @@ export function drawStylizedHand(
   ctx.restore();
 }
 
-export function handColorForSide(side: "left" | "right"): string {
-  return side === "left" ? LEFT : RIGHT;
-}
-
 export function drawAllHandsStylized(
   ctx: CanvasRenderingContext2D,
   hands: HandPayload[],
@@ -137,11 +130,12 @@ export function drawAllHandsStylized(
   canvasH: number,
   imgW: number,
   imgH: number,
+  handColors: { left: string; right: string },
 ): void {
   ctx.clearRect(0, 0, canvasW, canvasH);
   const box = letterboxRect(canvasW, canvasH, imgW, imgH);
   for (const h of hands) {
-    const c = handColorForSide(h.side);
+    const c = h.side === "left" ? handColors.left : handColors.right;
     drawStylizedHand(ctx, h, box, c);
   }
 }

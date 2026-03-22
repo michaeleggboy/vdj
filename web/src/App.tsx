@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { DeckPlatter } from "./components/DeckPlatter";
 import { DjAudioEngine } from "./components/DjAudioEngine";
 import { HandsCanvasLayer } from "./components/HandsCanvasLayer";
+import { ThemeControls } from "./components/ThemeControls";
 import { useHandWebSocket } from "./hooks/useHandWebSocket";
 import { assignHandsByCameraPosition } from "./lib/frameTransforms";
+import { HAND_WS_URL } from "./handWsUrl";
 import { useDjStore } from "./store/djStore";
+import { useThemeStore } from "./store/themeStore";
 import "./App.css";
 
 const NEUTRAL_DELAY_SEC = 5;
@@ -12,21 +15,21 @@ const NEUTRAL_DELAY_SEC = 5;
 function MixerFader({
   label,
   value,
-  vertical,
+  readoutHint,
 }: {
   label: string;
   value: number;
-  vertical?: boolean;
+  /** If set, fader is styled as a live readout (hands drive values), not a drag control. */
+  readoutHint?: string;
 }) {
   const pct = Math.round(value * 100);
+  const readout = readoutHint != null && readoutHint !== "";
   return (
-    <div className={`mixer-fader ${vertical ? "mixer-fader--vertical" : "mixer-fader--horizontal"}`}>
+    <div className={`mixer-fader mixer-fader--horizontal${readout ? " mixer-fader--readout" : ""}`}>
       <span className="mixer-fader__label">{label}</span>
+      {readout ? <span className="mixer-fader__hint">{readoutHint}</span> : null}
       <div className="mixer-fader__track" aria-hidden>
-        <div
-          className="mixer-fader__fill"
-          style={vertical ? { height: `${pct}%` } : { width: `${pct}%` }}
-        />
+        <div className="mixer-fader__fill" style={{ width: `${pct}%` }} />
       </div>
       <span className="mixer-fader__value">{pct}%</span>
     </div>
@@ -34,6 +37,9 @@ function MixerFader({
 }
 
 export default function App() {
+  useLayoutEffect(() => {
+    useThemeStore.getState().hydrate();
+  }, []);
   useHandWebSocket();
   const connected = useDjStore((s) => s.connected);
   const lastError = useDjStore((s) => s.lastError);
@@ -107,18 +113,36 @@ export default function App() {
 
   return (
     <div className="app">
+      <HandsCanvasLayer frame={previewFrame} className="hands-canvas-layer--viewport" />
       <header className="top-bar">
         <div className="top-bar__row">
           <div className="top-bar__brand">
             <h1>vdj</h1>
             <span className="top-bar__tagline">tabletop</span>
           </div>
-          <div className={`top-bar__status ${connected ? "top-bar__status--ok" : "top-bar__status--off"}`}>
-            {connected ? "Connected" : "Waiting…"}
+          <div
+            className={`top-bar__status ${connected ? "top-bar__status--ok" : "top-bar__status--off"}`}
+            title={
+              connected
+                ? "Receiving frames from hand_service"
+                : `Start hand_service (see README). This app expects ${HAND_WS_URL}`
+            }
+          >
+            {connected ? (
+              "Connected"
+            ) : (
+              <>
+                <span className="top-bar__status-primary">Hand service offline</span>
+                <span className="top-bar__status-hint">Run Python service · {HAND_WS_URL}</span>
+              </>
+            )}
           </div>
           <div className="top-bar__actions top-bar__actions--main">
             <DjAudioEngine />
-            <label className="top-bar__swap">
+            <label
+              className="top-bar__swap"
+              title="Swap which camera side (left/right) maps to Deck A vs B on screen and in gesture mapping. Audio channels stay A/B."
+            >
               <input
                 type="checkbox"
                 checked={swapHands}
@@ -158,54 +182,95 @@ export default function App() {
             </div>
           </div>
         ) : null}
-        <div className="top-bar__cal2" aria-label="Two-point calibration">
-          <span className="top-bar__cal2-label">Crossfader</span>
-          <button type="button" className="btn btn--mini" onClick={() => snapCrossLeft()} title="Hands where you want 0% crossfader">
-            Left 0%
-          </button>
-          <button type="button" className="btn btn--mini" onClick={() => snapCrossRight()} title="Hands where you want 100% crossfader">
-            Right 100%
-          </button>
-          <button type="button" className="btn btn--mini btn--ghost" onClick={() => clearCrossTwoPoint()}>
-            Clear
-          </button>
-          <span className="top-bar__cal2-label">Deck A</span>
-          <button type="button" className="btn btn--mini" onClick={() => snapDeckAQuiet()}>
-            Quiet
-          </button>
-          <button type="button" className="btn btn--mini" onClick={() => snapDeckALoud()}>
-            Loud
-          </button>
-          <span className="top-bar__cal2-label">Deck B</span>
-          <button type="button" className="btn btn--mini" onClick={() => snapDeckBQuiet()}>
-            Quiet
-          </button>
-          <button type="button" className="btn btn--mini" onClick={() => snapDeckBLoud()}>
-            Loud
-          </button>
-          <button type="button" className="btn btn--mini btn--ghost" onClick={() => clearGainTwoPoint()}>
-            Clear levels
-          </button>
-        </div>
+        <details className="top-bar__cal-wrap">
+          <summary className="top-bar__disclosure-summary">Calibration · two-point snaps</summary>
+          <div className="top-bar__cal2" role="group" aria-label="Two-point calibration">
+            <p className="top-bar__cal-hint">
+              Snaps target <strong>audio</strong> Deck A/B (mixer channels), not camera left/right. Use{" "}
+              <strong>Swap L/R</strong> if the on-screen columns should follow the other wrist.
+            </p>
+            <div className="top-bar__cal2-row">
+              <span className="top-bar__cal2-label">Crossfader</span>
+              <button
+                type="button"
+                className="btn btn--mini"
+                onClick={() => snapCrossLeft()}
+                title="With hands where you want minimum crossfader, set this as the 0% reference"
+              >
+                Left 0%
+              </button>
+              <button
+                type="button"
+                className="btn btn--mini"
+                onClick={() => snapCrossRight()}
+                title="With hands where you want maximum crossfader, set this as the 100% reference"
+              >
+                Right 100%
+              </button>
+              <button type="button" className="btn btn--mini btn--ghost" onClick={() => clearCrossTwoPoint()}>
+                Clear
+              </button>
+              <span className="top-bar__cal2-label" title="Always mixer channel A">
+                Deck A
+              </span>
+              <button
+                type="button"
+                className="btn btn--mini"
+                onClick={() => snapDeckAQuiet()}
+                title="Quiet end of range for audio Deck A"
+              >
+                Quiet
+              </button>
+              <button
+                type="button"
+                className="btn btn--mini"
+                onClick={() => snapDeckALoud()}
+                title="Loud end of range for audio Deck A"
+              >
+                Loud
+              </button>
+              <span className="top-bar__cal2-label" title="Always mixer channel B">
+                Deck B
+              </span>
+              <button
+                type="button"
+                className="btn btn--mini"
+                onClick={() => snapDeckBQuiet()}
+                title="Quiet end of range for audio Deck B"
+              >
+                Quiet
+              </button>
+              <button
+                type="button"
+                className="btn btn--mini"
+                onClick={() => snapDeckBLoud()}
+                title="Loud end of range for audio Deck B"
+              >
+                Loud
+              </button>
+              <button type="button" className="btn btn--mini btn--ghost" onClick={() => clearGainTwoPoint()}>
+                Clear levels
+              </button>
+            </div>
+          </div>
+        </details>
+        <ThemeControls />
         {lastError ? <p className="top-bar__err">{lastError}</p> : null}
       </header>
 
       <div className="table-surface">
-        <HandsCanvasLayer frame={previewFrame} />
         <div className="table-surface__grid">
           <section className={`deck-kit deck-kit--${leftDeck}`} aria-label={leftLabel}>
-            <DeckPlatter label={leftLabel} gain={leftGain} deck={leftDeck} handActive={!!leftHand} />
-            <MixerFader label="Level" value={leftGain} vertical />
+            <DeckPlatter gain={leftGain} deck={leftDeck} handActive={!!leftHand} />
           </section>
 
           <section className="deck-kit deck-kit--mixer" aria-label="Crossfader">
             <div className="deck-kit__mixer-spacer" />
-            <MixerFader label="Crossfader" value={crossfader} />
+            <MixerFader label="Crossfader" value={crossfader} readoutHint="from hands" />
           </section>
 
           <section className={`deck-kit deck-kit--${rightDeck}`} aria-label={rightLabel}>
-            <DeckPlatter label={rightLabel} gain={rightGain} deck={rightDeck} handActive={!!rightHand} />
-            <MixerFader label="Level" value={rightGain} vertical />
+            <DeckPlatter gain={rightGain} deck={rightDeck} handActive={!!rightHand} />
           </section>
         </div>
       </div>

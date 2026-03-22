@@ -3,9 +3,8 @@ import { assignHandsByCameraPosition } from "../lib/frameTransforms";
 import { mapFrame } from "../lib/gestureMapper";
 import type { FrameMessage } from "../protocol";
 import { parseServerMessage } from "../protocol";
+import { HAND_WS_URL } from "../handWsUrl";
 import { useDjStore } from "../store/djStore";
-
-const WS_URL = import.meta.env.VITE_HAND_WS ?? "ws://127.0.0.1:8765";
 
 /**
  * Connects to hand_service, feeds {@link mapFrame} into the DJ store.
@@ -46,7 +45,7 @@ export function useHandWebSocket() {
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
     const connect = () => {
-      ws = new WebSocket(WS_URL);
+      ws = new WebSocket(HAND_WS_URL);
       ws.onopen = () => {
         if (!alive) return;
         setConnected(true);
