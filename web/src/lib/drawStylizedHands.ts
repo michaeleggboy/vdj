@@ -1,4 +1,4 @@
-import { HAND_CONNECTIONS } from "./handConnections";
+import { HAND_OUTLINE_ORDER } from "./handConnections";
 import type { HandPayload } from "../protocol";
 
 const LEFT = "#5eead4";
@@ -53,8 +53,19 @@ function mapLm(
   return [box.ox + lm[0] * box.drawW, box.oy + lm[1] * box.drawH];
 }
 
+function centroid(pts: [number, number][]): [number, number] {
+  let sx = 0;
+  let sy = 0;
+  for (const [x, y] of pts) {
+    sx += x;
+    sy += y;
+  }
+  const n = pts.length || 1;
+  return [sx / n, sy / n];
+}
+
 /**
- * Rounded “tube” hand: soft volume stroke + crisp outline + joint blobs — reads more like a hand than wireframe.
+ * Filled hand silhouette from outer landmark loop — no bone segments.
  */
 export function drawStylizedHand(
   ctx: CanvasRenderingContext2D,
@@ -66,55 +77,51 @@ export function drawStylizedHand(
   if (!lm?.length) return;
 
   const pts = lm.map((p) => mapLm(p, box));
+  const outline: [number, number][] = [];
+  for (const idx of HAND_OUTLINE_ORDER) {
+    const p = pts[idx];
+    if (p) outline.push(p);
+  }
+  if (outline.length < 4) return;
+
   const scale = Math.min(box.drawW, box.drawH);
-  const volW = Math.max(10, scale * 0.048);
-  const midW = Math.max(4.5, scale * 0.024);
+  const [cx, cy] = centroid(outline);
+  const edgeW = Math.max(1.5, scale * 0.004);
 
   ctx.save();
-  ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  ctx.lineCap = "round";
 
-  // Soft volume (reads as flesh / mass)
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.2;
-  ctx.lineWidth = volW;
-  for (const [i, j] of HAND_CONNECTIONS) {
-    const p0 = pts[i];
-    const p1 = pts[j];
-    if (!p0 || !p1) continue;
-    ctx.beginPath();
-    ctx.moveTo(p0[0], p0[1]);
-    ctx.lineTo(p1[0], p1[1]);
-    ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(outline[0][0], outline[0][1]);
+  for (let i = 1; i < outline.length; i++) {
+    ctx.lineTo(outline[i][0], outline[i][1]);
   }
+  ctx.closePath();
 
-  // Main contour
-  ctx.globalAlpha = 0.95;
-  ctx.lineWidth = midW;
-  for (const [i, j] of HAND_CONNECTIONS) {
-    const p0 = pts[i];
-    const p1 = pts[j];
-    if (!p0 || !p1) continue;
-    ctx.beginPath();
-    ctx.moveTo(p0[0], p0[1]);
-    ctx.lineTo(p1[0], p1[1]);
-    ctx.stroke();
-  }
+  const g = ctx.createRadialGradient(
+    cx - scale * 0.02,
+    cy - scale * 0.02,
+    scale * 0.06,
+    cx,
+    cy,
+    scale * 0.42,
+  );
+  g.addColorStop(0, hexToRgba(color, 0.92));
+  g.addColorStop(0.55, hexToRgba(color, 0.72));
+  g.addColorStop(1, hexToRgba(color, 0.45));
+  ctx.fillStyle = g;
+  ctx.fill();
 
-  // Knuckle / joint highlights
-  const jr = Math.max(3.5, scale * 0.019);
-  for (let k = 0; k < pts.length; k++) {
-    const [px, py] = pts[k];
-    const g = ctx.createRadialGradient(px - jr * 0.3, py - jr * 0.3, 0, px, py, jr * 1.2);
-    g.addColorStop(0, "rgba(255,255,255,0.55)");
-    g.addColorStop(0.4, color);
-    g.addColorStop(1, hexToRgba(color, 0.45));
-    ctx.fillStyle = g;
-    ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(px, py, jr, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  ctx.strokeStyle = hexToRgba(color, 0.55);
+  ctx.lineWidth = edgeW * 2;
+  ctx.globalAlpha = 0.35;
+  ctx.stroke();
+
+  ctx.strokeStyle = hexToRgba(color, 0.85);
+  ctx.lineWidth = edgeW;
+  ctx.globalAlpha = 0.9;
+  ctx.stroke();
 
   ctx.restore();
 }

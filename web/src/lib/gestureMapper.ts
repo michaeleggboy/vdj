@@ -5,6 +5,10 @@ const EMA_ALPHA = 0.48;
 const INPUT_MARGIN = 0.07;
 const EPS = 1e-5;
 
+/** Fallback vertical gain: normalized wrist y (0=top). Top ~28% = full level; bottom ~28% = off; y=0.5 → 0.5 after Neutral. */
+const GAIN_Y_FULL = 0.28;
+const GAIN_Y_SILENT = 0.72;
+
 function clamp01(x: number): number {
   return Math.min(1, Math.max(0, x));
 }
@@ -87,7 +91,9 @@ function mapGainFromTwoPoint(ly: number, range: { quiet: number; loud: number } 
 }
 
 function mapGainFallback(yCal: number): number {
-  return clamp01(1 - expand01(yCal));
+  if (yCal <= GAIN_Y_FULL) return 1;
+  if (yCal >= GAIN_Y_SILENT) return 0;
+  return (GAIN_Y_SILENT - yCal) / (GAIN_Y_SILENT - GAIN_Y_FULL);
 }
 
 /**
