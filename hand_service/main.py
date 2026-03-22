@@ -26,6 +26,8 @@ from hand_service.protocol import frame_message, hello_message
 
 try:
     import websockets
+    from websockets.datastructures import Headers
+    from websockets.http11 import Response
 except ImportError as e:
     raise SystemExit("Install dependencies: pip install -r hand_service/requirements.txt") from e
 
@@ -138,7 +140,26 @@ async def _run_server(host: str, port: int, device: int, max_fps: float) -> None
             async with lock:
                 clients.discard(ws)
 
-    async with websockets.serve(handler, host, port):
+    async def process_request(connection, request):
+        """Plain HTTP hits (e.g. browser opened http://host:port) are not WebSocket upgrades."""
+        upgrade = (request.headers.get("Upgrade") or "").lower()
+        conn_raw = request.headers.get("Connection") or ""
+        conn_parts = {p.strip().lower() for p in conn_raw.split(",") if p.strip()}
+        if upgrade == "websocket" and "upgrade" in conn_parts:
+            return None
+        body = (
+            b"vdj hand_service: WebSocket only. "
+            b"Use ws:// from the web app (do not open this URL as http:// in a browser).\n"
+        )
+        hdrs = Headers(
+            [
+                ("Content-Type", "text/plain; charset=utf-8"),
+                ("Content-Length", str(len(body))),
+            ]
+        )
+        return Response(400, "Bad Request", hdrs, body)
+
+    async with websockets.serve(handler, host, port, process_request=process_request):
         await asyncio.Future()
 
 
