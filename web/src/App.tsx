@@ -1,10 +1,13 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeckPlatter } from "./components/DeckPlatter";
+import { DjAudioEngine } from "./components/DjAudioEngine";
 import { HandsCanvasLayer } from "./components/HandsCanvasLayer";
 import { useHandWebSocket } from "./hooks/useHandWebSocket";
 import { assignHandsByCameraPosition } from "./lib/frameTransforms";
 import { useDjStore } from "./store/djStore";
 import "./App.css";
+
+const NEUTRAL_DELAY_SEC = 5;
 
 function MixerFader({
   label,
@@ -44,6 +47,43 @@ export default function App() {
   const mapper = useDjStore((s) => s.mapper);
   const calibrate = useDjStore((s) => s.calibrate);
   const resetMapper = useDjStore((s) => s.resetMapper);
+  const [neutralCountdown, setNeutralCountdown] = useState<number | null>(null);
+
+  const toggleNeutralCountdown = useCallback(() => {
+    setNeutralCountdown((c) => (c === null ? NEUTRAL_DELAY_SEC : null));
+  }, []);
+
+  useEffect(() => {
+    if (neutralCountdown === null) return;
+    if (neutralCountdown === 0) {
+      calibrate();
+      setNeutralCountdown(null);
+      return;
+    }
+    const id = window.setTimeout(() => {
+      setNeutralCountdown((c) => (c === null ? null : c - 1));
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [neutralCountdown, calibrate]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "n" && e.key !== "N") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      e.preventDefault();
+      toggleNeutralCountdown();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleNeutralCountdown]);
   const snapCrossLeft = useDjStore((s) => s.snapCrossLeft);
   const snapCrossRight = useDjStore((s) => s.snapCrossRight);
   const clearCrossTwoPoint = useDjStore((s) => s.clearCrossTwoPoint);
@@ -76,7 +116,8 @@ export default function App() {
           <div className={`top-bar__status ${connected ? "top-bar__status--ok" : "top-bar__status--off"}`}>
             {connected ? "Connected" : "Waiting…"}
           </div>
-          <div className="top-bar__actions">
+          <div className="top-bar__actions top-bar__actions--main">
+            <DjAudioEngine />
             <label className="top-bar__swap">
               <input
                 type="checkbox"
@@ -85,8 +126,17 @@ export default function App() {
               />
               Swap L/R
             </label>
-            <button type="button" className="btn" onClick={() => calibrate()} title="Neutral pose for faders">
-              Neutral
+            <button
+              type="button"
+              className={`btn${neutralCountdown !== null ? " btn--neutral-armed" : ""}`}
+              onClick={toggleNeutralCountdown}
+              title={
+                neutralCountdown === null
+                  ? "Start 5s countdown, then capture neutral pose (or press N)"
+                  : "Cancel countdown"
+              }
+            >
+              {neutralCountdown === null ? "Neutral" : `Cancel (${neutralCountdown}s)`}
             </button>
             <button type="button" className="btn btn--ghost" onClick={() => resetMapper()}>
               Reset

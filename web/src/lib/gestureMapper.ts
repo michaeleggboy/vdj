@@ -174,8 +174,27 @@ export function mapFrame(
   };
 }
 
+/** Wrist positions from an assigned frame (after `assignHandsByCameraPosition`). */
+export function wristsFromAssignedFrame(frame: FrameMessage): {
+  lx?: number;
+  ly?: number;
+  rx?: number;
+  ry?: number;
+} {
+  const left = frame.hands.find((h) => h.side === "left");
+  const right = frame.hands.find((h) => h.side === "right");
+  const wl = wrist(left);
+  const wr = wrist(right);
+  return {
+    lx: wl?.[0],
+    ly: wl?.[1],
+    rx: wr?.[0],
+    ry: wr?.[1],
+  };
+}
+
 export function applyCalibrationFromFrame(prev: MapperState, frame: FrameMessage): MapperState {
-  const { lx, ly, ry } = prev.lastRaw;
+  const { lx, ly, ry } = wristsFromAssignedFrame(frame);
   if (lx === undefined || ly === undefined) return prev;
 
   const calLeft: NonNullable<MapperState["calLeft"]> = { x: 0.5 - lx, y: 0.5 - ly };
