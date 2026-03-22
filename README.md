@@ -37,12 +37,12 @@ npm install
 npm run dev
 ```
 
-Open the printed URL (usually `http://localhost:5173`). The UI connects to the hand service WebSocket.
+Open the printed URL (usually `http://localhost:5173`). The UI connects to the hand service WebSocket (default `ws://127.0.0.1:8765`; the status strip shows the URL when offline).
 
-If the service runs elsewhere, set:
+If the service runs on another host or port, set **`VITE_HAND_WS`** when building or running dev (see `web/src/handWsUrl.ts`), for example:
 
 ```bash
-VITE_HAND_WS=ws://127.0.0.1:8765 npm run dev
+VITE_HAND_WS=ws://192.168.1.10:8765 npm run dev
 ```
 
 ### Controls (defaults)
@@ -50,16 +50,25 @@ VITE_HAND_WS=ws://127.0.0.1:8765 npm run dev
 - **Left hand** — wrist **horizontal** position → **crossfader**; wrist **vertical** → **Deck A** level (higher hand = louder).
 - **Right hand** — wrist **vertical** → **Deck B** level.
 - **Neutral** — starts a **5 second** countdown so you can move both hands off the mouse into position; when it hits zero, the **current** frame is used as the neutral pose for calibrated axes (see `web/src/lib/gestureMapper.ts`). Click again while counting to **cancel**. Press **`N`** anywhere (except inputs) to start or cancel the same countdown.
+- **Setup** (collapsible) — **Calibration** (two-point snaps for crossfader and deck levels) and **Appearance** (theme preset + color overrides, stored in `localStorage`).
+- **Deck levels** — shown as a **circular ring** around each jog and a percentage readout (“from hands”), not separate vertical faders.
+- **Hands overlay** — stylized hand silhouettes are drawn over the full window (including the top bar) so they stay visible; pointer events pass through to controls underneath.
 
 ### Audio output (Web Audio)
 
 1. Click **Enable audio** once (browsers require a user gesture before `AudioContext` can run; Safari may show the context as suspended until then).
 2. Use **Deck A** / **Deck B** to pick **local audio files** from disk. Files are decoded in the browser only; nothing is uploaded.
 3. Press **Play** to start looping playback through the mixer; **Stop** stops both decks.
-4. Mixer behavior matches the on-screen faders: **equal-power crossfader** plus per-deck level, driven by `mapper.smooth` (see `web/src/audio/mixerEngine.ts`). Gain changes are smoothed on the audio thread to reduce zipper noise.
+4. Mixer behavior matches the on-screen controls: **equal-power crossfader** plus per-deck level, driven by `mapper.smooth` (see `web/src/audio/mixerEngine.ts`). Gain changes are smoothed on the audio thread to reduce zipper noise.
 5. **Swap A/B** only swaps on-screen columns and which camera side maps to which deck; **logical Deck A / B** in the mapper always drives the same audio channels.
 
 Loading tracks by **URL** is not implemented in this MVP (would require CORS-friendly hosts or a proxy). Use local files.
+
+## UI notes
+
+- **Themes** — `web/src/theme/vdjTheme.ts` defines **hardware** (default) and **classic** presets; customize via **Setup → Appearance**. Design intent for contributors: [`.impeccable.md`](.impeccable.md).
+- **Roadmap** — [docs/roadmap.md](docs/roadmap.md) (future deck features, a11y follow-ups).
+- **Accessibility** — Skip link to the tabletop, landmarks, and live regions for status/errors; see `.impeccable.md` for the current baseline.
 
 ## Privacy
 
