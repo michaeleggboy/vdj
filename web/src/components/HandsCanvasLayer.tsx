@@ -7,8 +7,7 @@ type Props = {
 };
 
 /**
- * Full tabletop layer: hands drawn in camera space (letterboxed), free-roaming — not clipped to platters.
- * Sits above the wood texture; mixer/decks stay on top (higher z-index).
+ * Full tabletop layer: hands in camera space (letterboxed), drawn above the deck grid (z-index).
  */
 export function HandsCanvasLayer({ frame }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
