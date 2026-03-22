@@ -197,7 +197,12 @@ export function applyCalibrationFromFrame(prev: MapperState, frame: FrameMessage
   const { lx, ly, ry } = wristsFromAssignedFrame(frame);
   if (lx === undefined || ly === undefined) return prev;
 
-  const calLeft: NonNullable<MapperState["calLeft"]> = { x: 0.5 - lx, y: 0.5 - ly };
+  /** Same horizontal signal as `mapCrossfader` (dual-hand average or left wrist). */
+  const crossX = computeCrossfaderControlX(frame);
+  const calLeft: NonNullable<MapperState["calLeft"]> = {
+    x: 0.5 - (crossX !== undefined ? crossX : lx),
+    y: 0.5 - ly,
+  };
 
   let calRight = prev.calRight;
   if (frame.hands.length >= 2 && ry !== undefined) {
