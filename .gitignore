@@ -1,0 +1,14 @@
+node_modules/
+web/node_modules/
+web/dist/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.local
+*.tsbuildinfo
+
+# Optional local full JARVIS tree (use hand_service/vendor for runtime)
+third_party/
