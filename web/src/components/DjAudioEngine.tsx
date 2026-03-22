@@ -105,6 +105,7 @@ export function DjAudioEngine() {
         <input
           type="file"
           accept="audio/*"
+          aria-label="Choose audio file for deck A"
           disabled={loading !== null}
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
@@ -121,6 +122,7 @@ export function DjAudioEngine() {
         <input
           type="file"
           accept="audio/*"
+          aria-label="Choose audio file for deck B"
           disabled={loading !== null}
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;

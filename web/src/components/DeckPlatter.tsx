@@ -36,7 +36,7 @@ export function DeckPlatter({ gain, deck, handActive }: Props) {
         <div
           className="deck-platter__wheel"
           style={{ "--platter-spin-duration": `${dur}s` } as CSSProperties}
-          aria-label={deckName}
+          aria-label={`${deckName} jog wheel`}
         >
           <div className="deck-platter__rim" aria-hidden />
           <div className="deck-platter__groove-field" aria-hidden />
@@ -49,8 +49,8 @@ export function DeckPlatter({ gain, deck, handActive }: Props) {
         <svg
           className="deck-platter__level-ring"
           viewBox="0 0 100 100"
-          role="img"
-          aria-label={`${deckName} level ${pct} percent, from hands`}
+          aria-hidden="true"
+          focusable="false"
         >
           <g transform="rotate(-90 50 50)">
             <circle

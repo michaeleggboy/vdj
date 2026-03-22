@@ -57,7 +57,7 @@ VITE_HAND_WS=ws://127.0.0.1:8765 npm run dev
 2. Use **Deck A** / **Deck B** to pick **local audio files** from disk. Files are decoded in the browser only; nothing is uploaded.
 3. Press **Play** to start looping playback through the mixer; **Stop** stops both decks.
 4. Mixer behavior matches the on-screen faders: **equal-power crossfader** plus per-deck level, driven by `mapper.smooth` (see `web/src/audio/mixerEngine.ts`). Gain changes are smoothed on the audio thread to reduce zipper noise.
-5. **Swap L/R** only swaps on-screen labels and which camera side maps to which deck; **logical Deck A / B** in the mapper always drives the same audio channels.
+5. **Swap A/B** only swaps on-screen columns and which camera side maps to which deck; **logical Deck A / B** in the mapper always drives the same audio channels.
 
 Loading tracks by **URL** is not implemented in this MVP (would require CORS-friendly hosts or a proxy). Use local files.
 

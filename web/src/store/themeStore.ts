@@ -41,8 +41,8 @@ function applyMerged(
 export const useThemeStore = create<ThemeState>((set, get) => ({
   presetId: "hardware",
   overrides: {},
-  handLeftHex: "#e84545",
-  handRightHex: "#f0ece8",
+  handLeftHex: "#ef4444",
+  handRightHex: "#f5f3f0",
   hydrated: false,
 
   hydrate: () => {

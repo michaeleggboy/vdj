@@ -1,6 +1,6 @@
-/* Theme tokens: default hardware = black/red/white; themeStore overwrites via inline style on documentElement */
+/* Theme tokens: hardware = red deck A, white deck B, silver center strip; themeStore overrides :root */
 :root {
-  /* Hardware default: black–red–white (themeStore / PRESET_HARDWARE mirror these) */
+  /* Hardware default (themeStore / PRESET_HARDWARE mirror these) */
   --vdj-fg: #f0f0ee;
   --vdj-app-spot: rgba(140, 24, 28, 0.14);
   --vdj-app-grad-top: #121212;
@@ -22,20 +22,23 @@
   --vdj-btn-bg-hover: rgba(255, 255, 255, 0.1);
   --vdj-accent-rgb: 229, 57, 53;
   --vdj-accent-readable: #ff8a84;
-  --vdj-deck-a-rgb: 196, 42, 48;
-  --vdj-deck-b-rgb: 210, 208, 212;
-  --vdj-hand-left: #e84545;
-  --vdj-hand-right: #f0ece8;
+  --vdj-deck-a-rgb: 214, 48, 56;
+  --vdj-deck-b-rgb: 242, 240, 238;
+  --vdj-hand-left: #ef4444;
+  --vdj-hand-right: #f5f3f0;
   --vdj-table-border: rgba(255, 255, 255, 0.06);
   --vdj-table-inset: rgba(255, 255, 255, 0.04);
-  --vdj-mixer-wood-a: rgba(32, 14, 14, 0.88);
-  --vdj-mixer-wood-b: rgba(12, 8, 8, 0.96);
-  --vdj-mixer-wood-c: rgba(4, 2, 2, 0.98);
-  --vdj-mixer-stripe: rgba(0, 0, 0, 0.28);
-  --vdj-mixer-inset-hi: rgba(255, 120, 120, 0.06);
-  --vdj-mixer-shadow-in: rgba(0, 0, 0, 0.5);
-  --vdj-mixer-shadow-drop: rgba(0, 0, 0, 0.55);
-  --vdj-mixer-border: rgba(20, 8, 8, 0.65);
+  --vdj-mixer-wood-a: rgba(58, 60, 66, 0.9);
+  --vdj-mixer-wood-b: rgba(34, 36, 40, 0.96);
+  --vdj-mixer-wood-c: rgba(18, 20, 24, 0.99);
+  --vdj-mixer-stripe: rgba(255, 255, 255, 0.035);
+  --vdj-mixer-inset-hi: rgba(255, 255, 255, 0.09);
+  --vdj-mixer-shadow-in: rgba(0, 0, 0, 0.45);
+  --vdj-mixer-shadow-drop: rgba(0, 0, 0, 0.48);
+  --vdj-mixer-border: rgba(255, 255, 255, 0.08);
+  --vdj-mixer-chrome-fg: #f0f0ee;
+  --vdj-mixer-fader-track-bg: rgba(0, 0, 0, 0.42);
+  --vdj-mixer-fader-track-border: rgba(255, 255, 255, 0.09);
   --vdj-platter-contact: rgba(0, 0, 0, 0.55);
   --vdj-jog-surround-1: rgba(42, 36, 36, 0.94);
   --vdj-jog-surround-2: rgba(18, 14, 14, 0.98);
@@ -479,9 +482,69 @@ details[open] > .top-bar__disclosure-summary::after {
   opacity: 0.55;
 }
 
-.top-bar__cal-wrap {
+.top-bar__neutral-with-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.top-bar__kbd {
+  font-family: var(--vdj-font-sans);
+  font-size: var(--vdj-type-caption);
+  font-weight: 600;
+  padding: 0.12rem 0.32rem;
+  border-radius: 4px;
+  border: 1px solid var(--vdj-btn-border);
+  background: var(--vdj-btn-bg);
+  color: inherit;
+  opacity: 0.52;
+  line-height: 1.2;
+  min-width: 1.35rem;
+  text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Single disclosure: calibration + appearance */
+.top-bar__setup {
   border-top: 1px solid var(--vdj-cal-border-top);
   background: var(--vdj-bar-bg-cal);
+}
+
+.top-bar__setup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.42rem 0.65rem 0.55rem;
+  font-size: var(--vdj-type-body);
+}
+
+.top-bar__setup-section {
+  margin: 0;
+}
+
+.top-bar__setup-section-title {
+  margin: 0 0 0.38rem;
+  padding: 0;
+  font-size: var(--vdj-type-label);
+  font-weight: 600;
+  line-height: var(--vdj-leading-tight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.top-bar__setup-section--appearance {
+  border-top: 1px solid var(--vdj-cal-border-top);
+  padding-top: 0.5rem;
+  margin-top: 0.1rem;
+}
+
+.top-bar__setup .top-bar__cal2 {
+  padding: 0 0 0.45rem;
+}
+
+.top-bar__setup .top-bar__theme-body {
+  padding: 0;
 }
 
 .top-bar__cal2 {
@@ -489,7 +552,7 @@ details[open] > .top-bar__disclosure-summary::after {
   flex-direction: column;
   align-items: stretch;
   gap: 0.4rem;
-  padding: 0 0.65rem 0.5rem;
+  padding: 0 0 0.5rem;
 }
 
 .top-bar__cal-hint {
@@ -523,25 +586,14 @@ details[open] > .top-bar__disclosure-summary::after {
   margin-right: 0.15rem;
 }
 
-/* Theme panel */
-.top-bar__theme {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  padding: 0;
-  border-top: 1px solid var(--vdj-cal-border-top);
-  background: var(--vdj-bar-bg-cal);
-  font-size: var(--vdj-type-body);
-}
-
+/* Theme fields (embedded in Setup disclosure) */
 .top-bar__theme-body {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 0.5rem 0.75rem;
   width: 100%;
-  padding: 0 0.65rem 0.55rem;
+  padding: 0;
 }
 
 .top-bar__theme-field {
@@ -676,8 +728,9 @@ details[open] > .top-bar__disclosure-summary::after {
     0 10px 28px rgba(0, 0, 0, 0.12);
 }
 
-/* Wood panel only on the mixer strip — deck columns stay clear so hands + vinyl read */
+/* Center mixer column: silver / light black inlay; classic preset uses its own dark strip */
 .table-surface__grid > .deck-kit--mixer {
+  color: var(--vdj-mixer-chrome-fg);
   background:
     linear-gradient(
       165deg,
@@ -699,6 +752,11 @@ details[open] > .top-bar__disclosure-summary::after {
   border: 1px solid var(--vdj-mixer-border);
   border-radius: 10px;
   padding: 0.35rem 0.25rem 0.5rem;
+}
+
+.deck-kit--mixer .mixer-fader--readout .mixer-fader__track {
+  background: var(--vdj-mixer-fader-track-bg);
+  border-color: var(--vdj-mixer-fader-track-border);
 }
 
 /* —— Deck + platter —— */
@@ -803,7 +861,7 @@ details[open] > .top-bar__disclosure-summary::after {
   font-weight: 500;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  opacity: 0.36;
+  opacity: 0.5;
 }
 
 /* Contact shadow: reads as jog clearance above the tabletop (non-rotating) */
@@ -1106,7 +1164,7 @@ details[open] > .top-bar__disclosure-summary::after {
   letter-spacing: 0.09em;
   line-height: var(--vdj-leading-tight);
   text-transform: uppercase;
-  opacity: 0.45;
+  opacity: 0.56;
 }
 
 .mixer-fader__hint {
@@ -1114,7 +1172,7 @@ details[open] > .top-bar__disclosure-summary::after {
   font-weight: 500;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  opacity: 0.36;
+  opacity: 0.5;
   text-align: center;
   line-height: var(--vdj-leading-tight);
   max-width: 5.5rem;

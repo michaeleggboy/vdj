@@ -1,4 +1,4 @@
-/** CSS custom properties on `document.documentElement` — hardware default (black / red / white) + classic (neon) preset. */
+/** CSS custom properties on `document.documentElement` — hardware = red–silver–black + white deck B + classic neon preset. */
 
 export const THEME_STORAGE_KEY = "vdj-theme-v1";
 
@@ -29,20 +29,25 @@ export const PRESET_HARDWARE: VdjThemeVars = {
   "--vdj-btn-bg-hover": "rgba(255, 255, 255, 0.1)",
   "--vdj-accent-rgb": "229, 57, 53",
   "--vdj-accent-readable": "#ff8a84",
-  "--vdj-deck-a-rgb": "196, 42, 48",
-  "--vdj-deck-b-rgb": "210, 208, 212",
-  "--vdj-hand-left": "#e84545",
-  "--vdj-hand-right": "#f0ece8",
+  /* Red deck A, white deck B (level ring + accents); center = silver / light black strip */
+  "--vdj-deck-a-rgb": "214, 48, 56",
+  "--vdj-deck-b-rgb": "242, 240, 238",
+  "--vdj-hand-left": "#ef4444",
+  "--vdj-hand-right": "#f5f3f0",
   "--vdj-table-border": "rgba(255, 255, 255, 0.06)",
   "--vdj-table-inset": "rgba(255, 255, 255, 0.04)",
-  "--vdj-mixer-wood-a": "rgba(32, 14, 14, 0.88)",
-  "--vdj-mixer-wood-b": "rgba(12, 8, 8, 0.96)",
-  "--vdj-mixer-wood-c": "rgba(4, 2, 2, 0.98)",
-  "--vdj-mixer-stripe": "rgba(0, 0, 0, 0.28)",
-  "--vdj-mixer-inset-hi": "rgba(255, 120, 120, 0.06)",
-  "--vdj-mixer-shadow-in": "rgba(0, 0, 0, 0.5)",
-  "--vdj-mixer-shadow-drop": "rgba(0, 0, 0, 0.55)",
-  "--vdj-mixer-border": "rgba(20, 8, 8, 0.65)",
+  /* Center column: charcoal silver (not white) */
+  "--vdj-mixer-wood-a": "rgba(58, 60, 66, 0.9)",
+  "--vdj-mixer-wood-b": "rgba(34, 36, 40, 0.96)",
+  "--vdj-mixer-wood-c": "rgba(18, 20, 24, 0.99)",
+  "--vdj-mixer-stripe": "rgba(255, 255, 255, 0.035)",
+  "--vdj-mixer-inset-hi": "rgba(255, 255, 255, 0.09)",
+  "--vdj-mixer-shadow-in": "rgba(0, 0, 0, 0.45)",
+  "--vdj-mixer-shadow-drop": "rgba(0, 0, 0, 0.48)",
+  "--vdj-mixer-border": "rgba(255, 255, 255, 0.08)",
+  "--vdj-mixer-chrome-fg": "#f0f0ee",
+  "--vdj-mixer-fader-track-bg": "rgba(0, 0, 0, 0.42)",
+  "--vdj-mixer-fader-track-border": "rgba(255, 255, 255, 0.09)",
   "--vdj-platter-contact": "rgba(0, 0, 0, 0.55)",
   "--vdj-jog-surround-1": "rgba(42, 36, 36, 0.94)",
   "--vdj-jog-surround-2": "rgba(18, 14, 14, 0.98)",
@@ -73,7 +78,7 @@ export const PRESET_HARDWARE: VdjThemeVars = {
   "--vdj-fader-v-b": "#6b6b70",
 };
 
-/** Earlier app look: cooler room + teal / magenta decks. */
+/** Earlier app look: cooler room + teal / magenta decks; dark center strip (not light hardware inlay). */
 export const PRESET_CLASSIC: VdjThemeVars = {
   ...PRESET_HARDWARE,
   "--vdj-fg": "#e8ecf0",
@@ -88,6 +93,17 @@ export const PRESET_CLASSIC: VdjThemeVars = {
   "--vdj-deck-b-rgb": "232, 121, 249",
   "--vdj-hand-left": "#5eead4",
   "--vdj-hand-right": "#e879f9",
+  "--vdj-mixer-wood-a": "rgba(44, 32, 48, 0.72)",
+  "--vdj-mixer-wood-b": "rgba(22, 16, 28, 0.95)",
+  "--vdj-mixer-wood-c": "rgba(10, 6, 14, 0.98)",
+  "--vdj-mixer-stripe": "rgba(0, 0, 0, 0.26)",
+  "--vdj-mixer-inset-hi": "rgba(200, 230, 255, 0.06)",
+  "--vdj-mixer-shadow-in": "rgba(0, 0, 0, 0.48)",
+  "--vdj-mixer-shadow-drop": "rgba(0, 0, 0, 0.52)",
+  "--vdj-mixer-border": "rgba(60, 44, 80, 0.5)",
+  "--vdj-mixer-chrome-fg": "#e8ecf0",
+  "--vdj-mixer-fader-track-bg": "rgba(6, 4, 8, 0.55)",
+  "--vdj-mixer-fader-track-border": "rgba(255, 255, 255, 0.08)",
   "--vdj-fader-hi-a": "#3fb950",
   "--vdj-fader-hi-b": "#58a6ff",
   "--vdj-fader-hi-c": "#a371f7",
