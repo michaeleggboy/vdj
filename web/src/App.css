@@ -158,10 +158,20 @@
   cursor: pointer;
   font: inherit;
   font-size: 0.76rem;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s ease;
 }
 
 .btn:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.btn:focus-visible {
+  outline: 2px solid rgba(94, 234, 212, 0.65);
+  outline-offset: 2px;
+}
+
+.btn:not(:disabled):active {
+  transform: scale(0.97);
 }
 
 .btn--ghost {
@@ -170,6 +180,78 @@
 
 .btn--neutral-armed {
   box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.35);
+}
+
+.top-bar__neutral-banner {
+  padding: 0.5rem 0.65rem 0.55rem;
+  background: linear-gradient(90deg, rgba(94, 234, 212, 0.14) 0%, rgba(0, 0, 0, 0.35) 42%, rgba(0, 0, 0, 0.28) 100%);
+  border-left: 4px solid rgba(94, 234, 212, 0.75);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+}
+
+.top-bar__neutral-banner-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.top-bar__neutral-banner-title {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(180, 245, 232, 0.95);
+}
+
+.top-bar__neutral-banner-digit-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+}
+
+.top-bar__neutral-banner-digit {
+  display: inline-block;
+  font-size: clamp(1.75rem, 5vmin, 2.75rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #b4f5e8;
+  text-shadow: 0 0 24px rgba(94, 234, 212, 0.45);
+  animation: neutral-countdown-pulse 0.45s ease-out;
+}
+
+.top-bar__neutral-banner-hint {
+  font-size: 0.72rem;
+  opacity: 0.82;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+@keyframes neutral-countdown-pulse {
+  0% {
+    transform: scale(0.88);
+    opacity: 0.65;
+  }
+  55% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-bar__neutral-banner-digit {
+    animation: none;
+  }
+
+  .btn:not(:disabled):active {
+    transform: none;
+  }
 }
 
 .btn--mini {

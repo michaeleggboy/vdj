@@ -143,6 +143,21 @@ export default function App() {
             </button>
           </div>
         </div>
+        {neutralCountdown !== null && neutralCountdown > 0 ? (
+          <div className="top-bar__neutral-banner" role="status" aria-live="polite">
+            <div className="top-bar__neutral-banner-inner">
+              <span className="top-bar__neutral-banner-title">Neutral calibration</span>
+              <span className="top-bar__neutral-banner-digit-wrap" aria-hidden>
+                <span key={neutralCountdown} className="top-bar__neutral-banner-digit">
+                  {neutralCountdown}
+                </span>
+              </span>
+              <span className="top-bar__neutral-banner-hint">
+                Move hands into position — press Neutral or N to cancel.
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div className="top-bar__cal2" aria-label="Two-point calibration">
           <span className="top-bar__cal2-label">Crossfader</span>
           <button type="button" className="btn btn--mini" onClick={() => snapCrossLeft()} title="Hands where you want 0% crossfader">
