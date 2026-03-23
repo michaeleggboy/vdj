@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { assignHandsByCameraPosition } from "../lib/frameTransforms";
-import { mapFrame } from "../lib/gestureMapper";
+import { EMA_ALPHA, mapFrame } from "../lib/gestureMapper";
 import type { FrameMessage } from "../protocol";
 import { parseServerMessage } from "../protocol";
 import { HAND_WS_URL } from "../handWsUrl";
@@ -15,6 +15,7 @@ export function useHandWebSocket() {
   const setError = useDjStore((s) => s.setError);
   const setLastFrameRaw = useDjStore((s) => s.setLastFrameRaw);
   const swapHands = useDjStore((s) => s.swapHands);
+  const deskLayoutSnapshot = useDjStore((s) => s.deskLayoutSnapshot);
   const mapperRef = useRef(useDjStore.getState().mapper);
 
   useEffect(() => {
@@ -25,8 +26,10 @@ export function useHandWebSocket() {
 
   const applyFrame = useCallback(
     (raw: FrameMessage) => {
-      const forControls = assignHandsByCameraPosition(raw, useDjStore.getState().swapHands);
-      const next = mapFrame(forControls, mapperRef.current);
+      const st = useDjStore.getState();
+      const forControls = assignHandsByCameraPosition(raw, st.swapHands);
+      const spatialLayout = st.deskLayoutSnapshot;
+      const next = mapFrame(forControls, mapperRef.current, EMA_ALPHA, spatialLayout, st.relativeLevelMode);
       mapperRef.current = next;
       setMapper(next);
     },
@@ -37,7 +40,7 @@ export function useHandWebSocket() {
     const raw = useDjStore.getState().lastFrameRaw;
     if (!raw) return;
     applyFrame(raw);
-  }, [swapHands, applyFrame]);
+  }, [swapHands, deskLayoutSnapshot, applyFrame]);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
