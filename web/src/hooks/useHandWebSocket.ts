@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { assignHandsByCameraPosition } from "../lib/frameTransforms";
-import { EMA_ALPHA, mapFrame } from "../lib/gestureMapper";
+import { mapFrame } from "../lib/gestureMapper";
 import type { FrameMessage } from "../protocol";
 import { parseServerMessage } from "../protocol";
 import { HAND_WS_URL } from "../handWsUrl";
@@ -11,6 +11,7 @@ import { useDjStore } from "../store/djStore";
  */
 export function useHandWebSocket() {
   const setMapper = useDjStore((s) => s.setMapper);
+  const requestTransportToggles = useDjStore((s) => s.requestTransportToggles);
   const setConnected = useDjStore((s) => s.setConnected);
   const setError = useDjStore((s) => s.setError);
   const setLastFrameRaw = useDjStore((s) => s.setLastFrameRaw);
@@ -29,11 +30,14 @@ export function useHandWebSocket() {
       const st = useDjStore.getState();
       const forControls = assignHandsByCameraPosition(raw, st.swapHands);
       const spatialLayout = st.deskLayoutSnapshot;
-      const next = mapFrame(forControls, mapperRef.current, EMA_ALPHA, spatialLayout, st.relativeLevelMode);
+      const next = mapFrame(forControls, mapperRef.current, undefined, spatialLayout, st.relativeLevelMode);
       mapperRef.current = next;
       setMapper(next);
+      if (next.smooth.transportToggles.length > 0) {
+        requestTransportToggles(next.smooth.transportToggles);
+      }
     },
-    [setMapper],
+    [setMapper, requestTransportToggles],
   );
 
   useEffect(() => {

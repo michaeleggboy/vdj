@@ -60,6 +60,8 @@ export type DjState = {
   setDeckLoaded: (deck: "a" | "b", loaded: boolean) => void;
   setDeckPlaying: (m: { a: boolean; b: boolean }) => void;
   requestTransportToggle: (deck: "a" | "b") => void;
+  /** Fire one transport toggle per deck on staggered ticks (fist gestures on both decks same frame). */
+  requestTransportToggles: (decks: ("a" | "b")[]) => void;
   requestDeckLoad: (deck: "a" | "b", file: File) => void;
   armScrubGuard: (deck: "a" | "b", ms: number) => void;
   nudgeDeckPitch: (deck: "a" | "b", delta: number) => void;
@@ -115,6 +117,13 @@ export const useDjStore = create<DjState>((set, get) => ({
   setDeckPlaying: (m) => set({ deckPlaying: m }),
   requestTransportToggle: (deck) =>
     set((s) => ({ transportToggleRequest: { deck, seq: s.transportToggleRequest.seq + 1 } })),
+  requestTransportToggles: (decks) => {
+    decks.forEach((deck, i) => {
+      window.setTimeout(() => {
+        get().requestTransportToggle(deck);
+      }, i * 24);
+    });
+  },
   requestDeckLoad: (deck, file) =>
     set((s) => ({ deckLoadRequest: { deck, file, seq: s.deckLoadRequest.seq + 1 } })),
   armScrubGuard: (deck, ms) =>
