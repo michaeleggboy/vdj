@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ChannelLevelReadout } from "./components/ChannelLevelReadout";
 import { DeckPlatter } from "./components/DeckPlatter";
 import { DjAudioEngine } from "./components/DjAudioEngine";
@@ -7,6 +7,7 @@ import { ThemeControlsPanel } from "./components/ThemeControls";
 import { useHandWebSocket } from "./hooks/useHandWebSocket";
 import { assignHandsByCameraPosition } from "./lib/frameTransforms";
 import { HAND_WS_URL } from "./handWsUrl";
+import { SPATIAL_FIST_DEBOUNCE_FRAMES } from "./lib/gestureMapper";
 import { useDjStore } from "./store/djStore";
 import { useThemeStore } from "./store/themeStore";
 import "./App.css";
@@ -127,8 +128,17 @@ export default function App() {
   const deckPlaying = useDjStore((s) => s.deckPlaying);
   const requestTransportToggle = useDjStore((s) => s.requestTransportToggle);
   const requestDeckLoad = useDjStore((s) => s.requestDeckLoad);
-  const { crossfader, deckAGain, deckBGain, scratchRateA, scratchRateB, handIntentLeft, handIntentRight, handStrengthLeft, handStrengthRight } =
-    mapper.smooth;
+  const {
+    crossfader,
+    deckAGain,
+    deckBGain,
+    scratchRateA,
+    scratchRateB,
+    handIntentLeft,
+    handIntentRight,
+    handStrengthLeft,
+    handStrengthRight,
+  } = mapper.smooth;
 
   const leftKitRef = useRef<HTMLDivElement | null>(null);
   const mixerStripRef = useRef<HTMLElement | null>(null);
@@ -153,9 +163,17 @@ export default function App() {
         return;
       }
       const plain = (r: DOMRect) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+      const leftPad = le.querySelector(".deck-platter__pad");
+      const rightPad = re.querySelector(".deck-platter__pad");
+      const centerOfPad = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+      };
+      const lr = le.getBoundingClientRect();
+      const rr = re.getBoundingClientRect();
       setDeskLayoutSnapshot({
-        left: plain(le.getBoundingClientRect()),
-        right: plain(re.getBoundingClientRect()),
+        left: plain(lr),
+        right: plain(rr),
         mixerFaderA: plain(fa.getBoundingClientRect()),
         mixerCrossfade: plain(xc.getBoundingClientRect()),
         mixerFaderB: plain(fb.getBoundingClientRect()),
@@ -163,6 +181,8 @@ export default function App() {
         viewportH: window.innerHeight,
         leftColumnDeck: sw ? "b" : "a",
         rightColumnDeck: sw ? "a" : "b",
+        ...(leftPad ? { leftPlatterCenter: centerOfPad(leftPad) } : {}),
+        ...(rightPad ? { rightPlatterCenter: centerOfPad(rightPad) } : {}),
       });
     };
 
@@ -223,9 +243,31 @@ export default function App() {
     return "Idle";
   };
 
+  const gestureIntentLabel = (intent: string, pinched: boolean, fistHeld: boolean) => {
+    const base = intentLabel(intent);
+    if (fistHeld) return `${base} (fist)`;
+    if (pinched) return `${base} (engaged)`;
+    return base;
+  };
+
+  const leftPinch = !!(leftHand && mapper.pinchEngaged[leftHand.label]);
+  const rightPinch = !!(rightHand && mapper.pinchEngaged[rightHand.label]);
+  const leftFistHeld =
+    !!leftHand && (mapper.fistFramesByHand[leftHand.label] ?? 0) >= SPATIAL_FIST_DEBOUNCE_FRAMES;
+  const rightFistHeld =
+    !!rightHand && (mapper.fistFramesByHand[rightHand.label] ?? 0) >= SPATIAL_FIST_DEBOUNCE_FRAMES;
+
+  const leftColIntensity = Math.max(0, Math.min(1, handStrengthLeft));
+  const rightColIntensity = Math.max(0, Math.min(1, handStrengthRight));
+  const crossColIntensity = Math.max(handStrengthLeft, handStrengthRight);
+
   return (
     <div className="app">
-      <HandsCanvasLayer frame={previewFrame} className="hands-canvas-layer--viewport" />
+      <HandsCanvasLayer
+        frame={previewFrame}
+        className="hands-canvas-layer--viewport"
+        pinchEngagedByLabel={mapper.pinchEngaged}
+      />
       <header className="top-bar top-bar--minimal">
         <div className="top-bar__row">
           <div className="top-bar__brand">
@@ -380,14 +422,14 @@ export default function App() {
         <div className="intent-rail" aria-live="polite">
           <div className="intent-badge intent-badge--left">
             <span className="intent-badge__title">Left hand</span>
-            <span className="intent-badge__value">{intentLabel(handIntentLeft)}</span>
+            <span className="intent-badge__value">{gestureIntentLabel(handIntentLeft, leftPinch, leftFistHeld)}</span>
             <span className="intent-badge__meter" aria-hidden>
               <span style={{ width: `${laneLeftStrength}%` }} />
             </span>
           </div>
           <div className="intent-badge intent-badge--right">
             <span className="intent-badge__title">Right hand</span>
-            <span className="intent-badge__value">{intentLabel(handIntentRight)}</span>
+            <span className="intent-badge__value">{gestureIntentLabel(handIntentRight, rightPinch, rightFistHeld)}</span>
             <span className="intent-badge__meter" aria-hidden>
               <span style={{ width: `${laneRightStrength}%` }} />
             </span>
@@ -399,10 +441,12 @@ export default function App() {
               laneLeftScrubActive || laneAActive ? " deck-kit--lane-active" : ""
             }`}
             aria-label={leftLabel}
+            style={{ "--lane-intensity": leftColIntensity } as CSSProperties}
           >
             <div
               ref={leftKitRef}
               className={`deck-column__lane deck-column__lane--scrub${laneLeftScrubActive ? " deck-column__lane--active" : ""}`}
+              style={{ "--lane-intensity": leftColIntensity } as CSSProperties}
             >
               <DeckPlatter
                 deck={leftDeck}
@@ -414,12 +458,13 @@ export default function App() {
                 onTransportToggle={() => onPadTransportToggle(leftDeck)}
               />
               <span className="spatial-region-hint spatial-region-hint--jog" aria-hidden="true">
-                Jog · scrub lane · index finger
+                Jog · scrub lane · pinch and rotate
               </span>
             </div>
             <div
               ref={mixerFaderARef}
               className={`deck-column__lane deck-column__lane--level${laneAActive ? " deck-column__lane--active" : ""}`}
+              style={{ "--lane-intensity": leftColIntensity } as CSSProperties}
             >
               <span className="spatial-region-hint spatial-region-hint--fader" aria-hidden="true">
                 Level A lane · move left/right
@@ -433,10 +478,12 @@ export default function App() {
               laneRightScrubActive || laneBActive ? " deck-kit--lane-active" : ""
             }`}
             aria-label={rightLabel}
+            style={{ "--lane-intensity": rightColIntensity } as CSSProperties}
           >
             <div
               ref={rightKitRef}
               className={`deck-column__lane deck-column__lane--scrub${laneRightScrubActive ? " deck-column__lane--active" : ""}`}
+              style={{ "--lane-intensity": rightColIntensity } as CSSProperties}
             >
               <DeckPlatter
                 deck={rightDeck}
@@ -448,12 +495,13 @@ export default function App() {
                 onTransportToggle={() => onPadTransportToggle(rightDeck)}
               />
               <span className="spatial-region-hint spatial-region-hint--jog" aria-hidden="true">
-                Jog · scrub lane · index finger
+                Jog · scrub lane · pinch and rotate
               </span>
             </div>
             <div
               ref={mixerFaderBRef}
               className={`deck-column__lane deck-column__lane--level${laneBActive ? " deck-column__lane--active" : ""}`}
+              style={{ "--lane-intensity": rightColIntensity } as CSSProperties}
             >
               <span className="spatial-region-hint spatial-region-hint--fader" aria-hidden="true">
                 Level B lane · move left/right
@@ -466,6 +514,7 @@ export default function App() {
             ref={mixerStripRef}
             className="deck-kit deck-kit--mixer mixer-strip control-canvas__col control-canvas__col--bottom"
             aria-label="Crossfader bottom lane"
+            style={{ "--lane-intensity": crossColIntensity } as CSSProperties}
           >
             <div className="mixer-strip__channels">
               <div
@@ -473,6 +522,7 @@ export default function App() {
                 className={`mixer-strip__crossfade-hit mixer-strip__hit--guided mixer-strip__crossfade-hit--bottom${
                   laneCrossActive ? " mixer-strip__lane-active" : ""
                 }`}
+                style={{ "--lane-intensity": crossColIntensity } as CSSProperties}
               >
                 <span className="spatial-region-hint spatial-region-hint--xf" aria-hidden="true">
                   Crossfader lane
