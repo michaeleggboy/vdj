@@ -22,6 +22,12 @@ export type HandPayload = {
   gesture: string;
   /** 21 landmarks, [x,y,z] with x,y in [0,1] */
   landmarks: [number, number, number][];
+  /** Thumb tip ↔ index tip distance in normalized image x/y (optional; client can compute from landmarks). */
+  pinch_distance?: number;
+  /** Tips below MCP in y (0–4), excluding thumb; optional — client can infer from landmarks. */
+  curled_fingers?: number;
+  /** Index tip ↔ pinky tip distance in normalized image x/y (optional). */
+  finger_spread?: number;
 };
 
 export type FrameMessage = {

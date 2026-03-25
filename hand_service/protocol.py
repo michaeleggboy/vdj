@@ -1,7 +1,7 @@
 """vdj WebSocket protocol v1 — mirrors docs/protocol.md and web/src/protocol.ts."""
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class HelloMessage(TypedDict):
@@ -23,6 +23,9 @@ class HandPayload(TypedDict):
     confidence: float
     gesture: str
     landmarks: list[list[float]]  # 21 x [x,y,z] normalized x,y
+    pinch_distance: NotRequired[float]  # thumb tip (4) ↔ index tip (8), normalized image xy
+    curled_fingers: NotRequired[int]  # tip below MCP in y, 0–4 (no thumb)
+    finger_spread: NotRequired[float]  # index tip (8) ↔ pinky tip (20), normalized xy
 
 
 class FrameMessage(TypedDict):

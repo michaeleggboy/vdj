@@ -40,6 +40,36 @@ def _side_from_label(label: str) -> str:
     return "right"
 
 
+def _pinch_distance(landmarks: list) -> float:
+    """Normalized Euclidean distance between thumb tip (4) and index tip (8)."""
+    if len(landmarks) < 9:
+        return 1.0
+    t = landmarks[4]
+    i = landmarks[8]
+    return float(((t[0] - i[0]) ** 2 + (t[1] - i[1]) ** 2) ** 0.5)
+
+
+def _curled_fingers(landmarks: list) -> int:
+    """Count fingers where tip y > MCP y (excludes thumb)."""
+    pairs = [(8, 5), (12, 9), (16, 13), (20, 17)]
+    if len(landmarks) < 21:
+        return 0
+    count = 0
+    for tip_idx, mcp_idx in pairs:
+        if landmarks[tip_idx][1] > landmarks[mcp_idx][1]:
+            count += 1
+    return count
+
+
+def _finger_spread(landmarks: list) -> float:
+    """Normalized distance between index tip (8) and pinky tip (20)."""
+    if len(landmarks) < 21:
+        return 0.5
+    idx = landmarks[8]
+    pnk = landmarks[20]
+    return float(((idx[0] - pnk[0]) ** 2 + (idx[1] - pnk[1]) ** 2) ** 0.5)
+
+
 def _build_hands_payload(vf_objects, w: int, h: int) -> list[dict]:
     out: list[dict] = []
     for o in vf_objects:
@@ -58,6 +88,9 @@ def _build_hands_payload(vf_objects, w: int, h: int) -> list[dict]:
                 "confidence": float(o.confidence),
                 "gesture": o.gesture or "unknown",
                 "landmarks": landmarks,
+                "pinch_distance": _pinch_distance(landmarks),
+                "curled_fingers": _curled_fingers(landmarks),
+                "finger_spread": _finger_spread(landmarks),
             }
         )
     return out
