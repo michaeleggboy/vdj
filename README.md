@@ -47,18 +47,18 @@ VITE_HAND_WS=ws://192.168.1.10:8765 npm run dev
 
 ### Controls (defaults)
 
-- **Left hand** — wrist **horizontal** position → **crossfader**; wrist **vertical** → **Deck A** level (higher hand = louder).
-- **Right hand** — wrist **vertical** → **Deck B** level.
+- **Bodily mode** (Spatial zones **off**) — **Left** wrist: **X** → **crossfader**, **Y** → **Deck A** gain; **Right** wrist: **Y** → **Deck B** gain. **Wrist motion on each deck** nudges **playback rate** (scratch): mostly **vertical** swipe on the platter, with a smaller **horizontal** component; strong pull-back can request **reverse** playback when the browser supports negative `playbackRate`. See `web/src/lib/gestureMapper.ts`.
+- **Deck-like spatial** (Spatial zones **on**) — Wrist must be over a **screen region**: **left/right deck columns** → **scratch** (same vertical-first signal as bodily mode); **mixer strip** **CH A / CH B** vertical areas → **gain** for that channel (**hit rects are inflated** for easier level control, clamped to the mixer strip); **crossfader** lane → **crossfader** (with bodily X fallback if no hand is on the crossfader rect). Hit targets are the `mixer-strip__fader-hit` and `crossfade-hit` wrappers in `App.tsx`.
 - **Neutral** — starts a **5 second** countdown so you can move both hands off the mouse into position; when it hits zero, the **current** frame is used as the neutral pose for calibrated axes (see `web/src/lib/gestureMapper.ts`). Click again while counting to **cancel**. Press **`N`** anywhere (except inputs) to start or cancel the same countdown.
-- **Setup** (collapsible) — **Calibration** (two-point snaps for crossfader and deck levels) and **Appearance** (theme preset + color overrides, stored in `localStorage`).
-- **Deck levels** — shown as a **circular ring** around each jog and a percentage readout (“from hands”), not separate vertical faders.
+- **Setup** (collapsible) — **Calibration** (two-point snaps for crossfader and deck levels), **Spatial zones** toggle, and **Appearance** (theme preset + color overrides, stored in `localStorage`).
+- **Channel level readout** — vertical **CH A / CH B** in the center mixer strip (plus percentage); platters are **jog-only** (no level ring) with **cosmetic spin** tied to scratch rate (disabled for `prefers-reduced-motion`).
 - **Hands overlay** — stylized hand silhouettes are drawn over the full window (including the top bar) so they stay visible; pointer events pass through to controls underneath.
 
 ### Audio output (Web Audio)
 
 1. Click **Enable audio** once (browsers require a user gesture before `AudioContext` can run; Safari may show the context as suspended until then).
 2. Use **Deck A** / **Deck B** to pick **local audio files** from disk. Files are decoded in the browser only; nothing is uploaded.
-3. Press **Play** to start looping playback through the mixer; **Stop** stops both decks.
+3. Use **Play** / **Pause** per deck for independent looping playback; **Stop all** pauses both. Small meters show post-fader level; **BPM** is an on-load estimate (display only).
 4. Mixer behavior matches the on-screen controls: **equal-power crossfader** plus per-deck level, driven by `mapper.smooth` (see `web/src/audio/mixerEngine.ts`). Gain changes are smoothed on the audio thread to reduce zipper noise.
 5. **Swap A/B** only swaps on-screen columns and which camera side maps to which deck; **logical Deck A / B** in the mapper always drives the same audio channels.
 
