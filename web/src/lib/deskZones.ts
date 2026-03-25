@@ -23,6 +23,9 @@ export type DeskLayoutForMapper = {
   /** Which audio deck the left tabletop column shows */
   leftColumnDeck: "a" | "b";
   rightColumnDeck: "a" | "b";
+  /** Optional scrub pad center (viewport px); linear scrub fallback when omitted. */
+  leftPlatterCenter?: { x: number; y: number };
+  rightPlatterCenter?: { x: number; y: number };
 };
 
 /** Spatial zone for hit testing (DJM-style: crossfader cap wins over adjacent vertical strips). */

@@ -3,17 +3,40 @@ import { hitSpatialDeskZoneWithHysteresis, isDeskLayoutComplete, laneForSpatialZ
 import type { FrameMessage, HandPayload } from "../protocol";
 
 const WRIST = 0;
+const THUMB_TIP = 4;
 const INDEX_TIP = 8;
-/** EMA blend toward new control targets each frame (exported for {@link mapFrame} call sites). */
+const PINKY_TIP = 20;
+/** Pinch engage / release (normalized thumb–index distance) with hysteresis. */
+const PINCH_ENGAGE_THRESHOLD = 0.045;
+const PINCH_RELEASE_THRESHOLD = 0.065;
+/** Fast crossfader chop when wrist delta per frame exceeds this (normalized). */
+const CUT_VELOCITY_THRESHOLD = 0.025;
+const CUT_SNAP_ALPHA = 0.95;
+/** Fist = enough fingers curled (excludes pinch with one finger). */
+const FIST_CURL_THRESHOLD = 3;
+const FIST_DEBOUNCE_FRAMES = 8;
+/** Re-export for UI (intent badges). */
+export const SPATIAL_FIST_DEBOUNCE_FRAMES = FIST_DEBOUNCE_FRAMES;
+export const SPATIAL_FIST_CURL_MIN = FIST_CURL_THRESHOLD;
+/** EMA blend default when caller does not pass alpha (exported). */
 export const EMA_ALPHA = 0.48;
+const EMA_ALPHA_MIN = 0.25;
+const EMA_ALPHA_MAX = 0.55;
+const CONFIDENCE_LOW = 0.6;
+const CONFIDENCE_HIGH = 0.95;
+/** While scratching, blend raw drive into rate. */
 const SCRATCH_ALPHA = 0.44;
+/** Faster blend when raw is at rest (rate 1 / vel 0) so release settles in ~150ms at ~30Hz. */
+const SCRATCH_RELEASE_ALPHA = 0.54;
+/** Scale angular Δ (rad) × radial factor into scratch drive units (matches linear finger path magnitude). */
+const ANGULAR_DRIVE_SCALE = 9;
+const ANGULAR_R_MIN_PX = 8;
 /** Combined drive: vertical dominates (platter swipe); horizontal still nudges. */
 const SCRATCH_WY = 1;
 const SCRATCH_WX = 0.32;
 /** Normalized wrist delta per frame below this → treat as idle (rate → 1). */
 const SCRATCH_DRIVE_DEAD = 3.5e-4;
 const SCRATCH_SENS = 46;
-const SCRUB_FINGER_ALPHA = 0.58;
 const INPUT_MARGIN = 0.07;
 const EPS = 1e-5;
 
@@ -37,6 +60,14 @@ const LEVEL_RELATIVE_SCALE = 1.7;
 const CROSS_CENTER_SNAP = 0.04;
 const CROSS_RELATIVE_SCALE = 3.2;
 const CROSS_SLEW_MAX = 0.2;
+/** Index fingertip delta smoothing when using linear scrub fallback. */
+const SCRUB_FINGER_ALPHA = 0.58;
+const SCRATCH_CURVE_EXPO = 1.4;
+const SCRATCH_CURVE_REF = 0.02;
+const SPREAD_MIN = 0.04;
+const SPREAD_MAX = 0.18;
+const SENS_MIN = 16;
+const SENS_MAX = 72;
 
 export type HandIntent = "idle" | "crossfader" | "levelA" | "levelB" | "scrubA" | "scrubB";
 
@@ -65,6 +96,8 @@ export type MapperState = {
     handIntentRight: HandIntent;
     handStrengthLeft: number;
     handStrengthRight: number;
+    /** Transport toggles from fist gesture this frame; consumed by the WebSocket hook. */
+    transportToggles: ("a" | "b")[];
   };
   calLeft: { x: number; y: number } | null;
   calRight: { y: number } | null;
@@ -83,6 +116,14 @@ export type MapperState = {
   prevFingerByHand: Record<string, [number, number]>;
   /** Relative level dwell lock frame counters by tracked hand label. */
   levelDwellByHand: Record<string, number>;
+  /** Previous platter angle (viewport atan2) per hand while pinch-scrubbing; null when not engaged. */
+  prevPlatterAngleByHand: Record<string, number | null>;
+  /** Pinch engaged (spatial scrub lane) per hand label — hysteresis state. */
+  pinchEngaged: Record<string, boolean>;
+  /** Frames held in fist pose per hand (deck zones). */
+  fistFramesByHand: Record<string, number>;
+  /** Fist toggle already fired until hand opens. */
+  fistFiredByHand: Record<string, boolean>;
 };
 
 export function createMapperState(): MapperState {
@@ -99,6 +140,7 @@ export function createMapperState(): MapperState {
       handIntentRight: "idle",
       handStrengthLeft: 0,
       handStrengthRight: 0,
+      transportToggles: [],
     },
     calLeft: null,
     calRight: null,
@@ -110,6 +152,10 @@ export function createMapperState(): MapperState {
     prevWristByHand: {},
     prevFingerByHand: {},
     levelDwellByHand: {},
+    prevPlatterAngleByHand: {},
+    pinchEngaged: {},
+    fistFramesByHand: {},
+    fistFiredByHand: {},
   };
 }
 
@@ -123,6 +169,75 @@ function indexTip(h: HandPayload | undefined): [number, number] | null {
   if (!h?.landmarks?.[INDEX_TIP]) return null;
   const [x, y] = h.landmarks[INDEX_TIP];
   return [x, y];
+}
+
+const CURL_PAIRS: [number, number][] = [
+  [8, 5],
+  [12, 9],
+  [16, 13],
+  [20, 17],
+];
+
+function pinchDistanceNorm(h: HandPayload): number {
+  if (typeof h.pinch_distance === "number" && Number.isFinite(h.pinch_distance)) {
+    return h.pinch_distance;
+  }
+  const lm = h.landmarks;
+  if (!lm?.[THUMB_TIP] || !lm?.[INDEX_TIP]) return 1;
+  const [x4, y4] = lm[THUMB_TIP];
+  const [x8, y8] = lm[INDEX_TIP];
+  return Math.hypot(x4 - x8, y4 - y8);
+}
+
+/** Hysteresis: stay pinched until fingers open past release threshold. */
+function pinchEngagedWithHysteresis(h: HandPayload, wasPinched: boolean): boolean {
+  const d = pinchDistanceNorm(h);
+  if (wasPinched) return d < PINCH_RELEASE_THRESHOLD;
+  return d < PINCH_ENGAGE_THRESHOLD;
+}
+
+function curledFingersFromLandmarks(h: HandPayload): number {
+  if (typeof h.curled_fingers === "number" && Number.isFinite(h.curled_fingers)) {
+    return Math.max(0, Math.min(4, Math.round(h.curled_fingers)));
+  }
+  const lm = h.landmarks;
+  if (!lm || lm.length < 21) return 0;
+  let c = 0;
+  for (const [tip, mcp] of CURL_PAIRS) {
+    if (lm[tip][1] > lm[mcp][1]) c += 1;
+  }
+  return c;
+}
+
+function fingerSpreadNorm(h: HandPayload): number {
+  if (typeof h.finger_spread === "number" && Number.isFinite(h.finger_spread)) {
+    return h.finger_spread;
+  }
+  const lm = h.landmarks;
+  if (!lm?.[INDEX_TIP] || !lm?.[PINKY_TIP]) return 0.1;
+  const [x8, y8] = lm[INDEX_TIP];
+  const [x20, y20] = lm[PINKY_TIP];
+  return Math.hypot(x8 - x20, y8 - y20);
+}
+
+function dynamicScratchSens(fingerSpread: number): number {
+  const t = clamp01((fingerSpread - SPREAD_MIN) / (SPREAD_MAX - SPREAD_MIN));
+  return SENS_MIN + t * (SENS_MAX - SENS_MIN);
+}
+
+/** Blend factor from mean hand tracking confidence (~30Hz frames). */
+export function frameAlphaFromConfidence(frame: FrameMessage): number {
+  const avg =
+    frame.hands.length > 0 ? frame.hands.reduce((s, h) => s + h.confidence, 0) / frame.hands.length : 0.8;
+  const t = clamp01((avg - CONFIDENCE_LOW) / (CONFIDENCE_HIGH - CONFIDENCE_LOW));
+  return EMA_ALPHA_MIN + t * (EMA_ALPHA_MAX - EMA_ALPHA_MIN);
+}
+
+function wrapAngleDelta(prevTheta: number, theta: number): number {
+  let d = theta - prevTheta;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
 }
 
 /**
@@ -186,9 +301,12 @@ function scratchDrive(dx: number, dy: number): number {
   return SCRATCH_WY * (-dy) + SCRATCH_WX * dx;
 }
 
-function scratchRateFromDrive(drive: number): number {
+function scratchRateFromDrive(drive: number, sens: number = SCRATCH_SENS): number {
   if (Math.abs(drive) < SCRATCH_DRIVE_DEAD) return 1;
-  const v = 1 + SCRATCH_SENS * drive;
+  const sign = Math.sign(drive);
+  const magnitude = Math.abs(drive);
+  const curved = Math.pow(magnitude / SCRATCH_CURVE_REF, SCRATCH_CURVE_EXPO) * SCRATCH_CURVE_REF;
+  const v = 1 + sens * sign * curved;
   if (v >= 0.2) return Math.min(3, v);
   if (v <= -0.25) return Math.max(-2, v);
   return 1;
@@ -203,36 +321,43 @@ function smoothScratch(prevRate: number, raw: number, alpha: number): number {
   return alpha * raw + (1 - alpha) * prevRate;
 }
 
+/** Stronger smoothing when `raw` already equals the rest value but `prev` has not settled (pinch release). */
+function smoothScratchBlend(prev: number, raw: number, alphaScratch: number, alphaRelease: number, restRaw: number): number {
+  const atRest = Math.abs(raw - restRaw) < 1e-6;
+  const prevOff = Math.abs(prev - restRaw) > 1e-6;
+  const alpha = atRest && prevOff ? alphaRelease : alphaScratch;
+  return alpha * raw + (1 - alpha) * prev;
+}
+
+type BestScratch = { drive: number; sens: number };
+
 function updateScratchDeltas(
   zone: SpatialDeskZone | null,
   layout: DeskLayoutForMapper,
-  dx: number,
-  dy: number,
-  bestDriveA: { v: number },
-  bestDriveB: { v: number },
+  drive: number,
+  sens: number,
+  bestA: BestScratch,
+  bestB: BestScratch,
   sawA: { v: boolean },
   sawB: { v: boolean },
 ): void {
-  const d = scratchDrive(dx, dy);
-  if (zone === "leftDeck") {
-    const deck = layout.leftColumnDeck;
+  const pick = (deck: "a" | "b") => {
     if (deck === "a") {
       sawA.v = true;
-      if (Math.abs(d) >= Math.abs(bestDriveA.v)) bestDriveA.v = d;
+      if (Math.abs(drive) >= Math.abs(bestA.drive)) {
+        bestA.drive = drive;
+        bestA.sens = sens;
+      }
     } else {
       sawB.v = true;
-      if (Math.abs(d) >= Math.abs(bestDriveB.v)) bestDriveB.v = d;
+      if (Math.abs(drive) >= Math.abs(bestB.drive)) {
+        bestB.drive = drive;
+        bestB.sens = sens;
+      }
     }
-  } else if (zone === "rightDeck") {
-    const deck = layout.rightColumnDeck;
-    if (deck === "a") {
-      sawA.v = true;
-      if (Math.abs(d) >= Math.abs(bestDriveA.v)) bestDriveA.v = d;
-    } else {
-      sawB.v = true;
-      if (Math.abs(d) >= Math.abs(bestDriveB.v)) bestDriveB.v = d;
-    }
-  }
+  };
+  if (zone === "leftDeck") pick(layout.leftColumnDeck);
+  else if (zone === "rightDeck") pick(layout.rightColumnDeck);
 }
 
 function mapFrameSpatial(
@@ -254,12 +379,20 @@ function mapFrameSpatial(
   const intentBySide: { left: HandIntent; right: HandIntent } = { left: "idle", right: "idle" };
   const intentStrength: { left: number; right: number } = { left: 0, right: 0 };
 
-  const bestDriveA = { v: 0 };
-  const bestDriveB = { v: 0 };
+  const bestA: BestScratch = { drive: 0, sens: SCRATCH_SENS };
+  const bestB: BestScratch = { drive: 0, sens: SCRATCH_SENS };
   const sawScratchA = { v: false };
   const sawScratchB = { v: false };
 
+  const nextPinchByHand = { ...prev.pinchEngaged };
+  const nextAngleByHand = { ...prev.prevPlatterAngleByHand };
+  const nextFistFrames = { ...prev.fistFramesByHand };
+  const nextFistFired = { ...prev.fistFiredByHand };
+  const transportSet = new Set<"a" | "b">();
+  const labelsSeen = new Set<string>();
+
   for (const h of frame.hands) {
+    labelsSeen.add(h.label);
     const w = wrist(h);
     if (!w) continue;
     const [nx, ny] = w;
@@ -273,18 +406,23 @@ function mapFrameSpatial(
     nextPrevWrist[h.label] = [nx, ny];
     const f = indexTip(h) ?? w;
     const [fx, fy] = f;
-    const pf = prev.prevFingerByHand[h.label] ?? [fx, fy];
-    const fdx = (fx - pf[0]) * SCRUB_FINGER_ALPHA;
-    const fdy = (fy - pf[1]) * SCRUB_FINGER_ALPHA;
-    nextPrevFinger[h.label] = [fx, fy];
 
     const lane = zone ? laneForSpatialZone(zone, layout) : null;
 
+    const clearDeckGestureState = () => {
+      nextPinchByHand[h.label] = false;
+      nextAngleByHand[h.label] = null;
+      nextFistFrames[h.label] = 0;
+      nextFistFired[h.label] = false;
+    };
+
     if (lane === "crossfader") {
+      clearDeckGestureState();
       crossDelta.push(dx);
       intentBySide[h.side] = "crossfader";
       intentStrength[h.side] = Math.max(intentStrength[h.side], Math.min(1, Math.abs(dx) * 42));
     } else if (lane === "levelA") {
+      clearDeckGestureState();
       nextDwell[h.label] = (nextDwell[h.label] ?? 0) + 1;
       if ((nextDwell[h.label] ?? 0) >= LEVEL_DWELL_FRAMES) {
         levelDeltaA.push(dx * LEVEL_RELATIVE_SCALE);
@@ -294,6 +432,7 @@ function mapFrameSpatial(
         intentBySide[h.side] = "levelA";
       }
     } else if (lane === "levelB") {
+      clearDeckGestureState();
       nextDwell[h.label] = (nextDwell[h.label] ?? 0) + 1;
       if ((nextDwell[h.label] ?? 0) >= LEVEL_DWELL_FRAMES) {
         levelDeltaB.push(dx * LEVEL_RELATIVE_SCALE);
@@ -303,21 +442,127 @@ function mapFrameSpatial(
         intentBySide[h.side] = "levelB";
       }
     } else if (zone != null) {
-      updateScratchDeltas(zone, layout, fdx, fdy, bestDriveA, bestDriveB, sawScratchA, sawScratchB);
-      intentBySide[h.side] = lane === "scrubA" ? "scrubA" : "scrubB";
-      intentStrength[h.side] = Math.max(intentStrength[h.side], Math.min(1, Math.abs(scratchDrive(fdx, fdy)) * 12));
+      const wasPinched = prev.pinchEngaged[h.label] ?? false;
+      const pinchOn = pinchEngagedWithHysteresis(h, wasPinched);
+      nextPinchByHand[h.label] = pinchOn;
       nextDwell[h.label] = 0;
+
+      const curled = curledFingersFromLandmarks(h);
+      const isFist = curled >= FIST_CURL_THRESHOLD;
+      const prevFf = prev.fistFramesByHand[h.label] ?? 0;
+      const prevFired = prev.fistFiredByHand[h.label] ?? false;
+      if (isFist) {
+        const nf = prevFf + 1;
+        nextFistFrames[h.label] = nf;
+        if (nf >= FIST_DEBOUNCE_FRAMES && !prevFired) {
+          nextFistFired[h.label] = true;
+          const deckKey = zone === "leftDeck" ? layout.leftColumnDeck : layout.rightColumnDeck;
+          transportSet.add(deckKey);
+        } else {
+          nextFistFired[h.label] = prevFired;
+        }
+      } else {
+        nextFistFrames[h.label] = 0;
+        nextFistFired[h.label] = false;
+      }
+
+      const scrubIntent: HandIntent = lane === "scrubA" ? "scrubA" : "scrubB";
+
+      if (pinchOn && !isFist) {
+        const sens = dynamicScratchSens(fingerSpreadNorm(h));
+        const fingerVp = normalizedImageToViewport(fx, fy, layout, iw, ih);
+        const deckRect = zone === "leftDeck" ? layout.left : layout.right;
+        const padC = zone === "leftDeck" ? layout.leftPlatterCenter : layout.rightPlatterCenter;
+        const hasPadCenter =
+          padC != null && Number.isFinite(padC.x) && Number.isFinite(padC.y);
+        const cx = hasPadCenter ? padC.x : (deckRect.left + deckRect.right) / 2;
+        const cy = hasPadCenter ? padC.y : (deckRect.top + deckRect.bottom) / 2;
+
+        let drive = 0;
+        let applyScratch = false;
+
+        if (hasPadCenter) {
+          const theta = Math.atan2(fingerVp.y - cy, fingerVp.x - cx);
+          if (!wasPinched) {
+            nextAngleByHand[h.label] = theta;
+          } else {
+            const prevTheta = prev.prevPlatterAngleByHand[h.label];
+            if (prevTheta == null) {
+              nextAngleByHand[h.label] = theta;
+            } else {
+              const dTheta = wrapAngleDelta(prevTheta, theta);
+              const deckW = deckRect.right - deckRect.left;
+              const deckH = deckRect.bottom - deckRect.top;
+              const rMax = Math.max(ANGULAR_R_MIN_PX, Math.min(deckW, deckH) * 0.5);
+              const r = Math.hypot(fingerVp.x - cx, fingerVp.y - cy);
+              const radial = Math.max(0.15, Math.min(1, r / rMax));
+              const distance = Math.hypot(fingerVp.x - cx, fingerVp.y - cy);
+              const distScale = 0.3 + 0.7 * Math.min(1, distance / 150);
+              drive = -dTheta * radial * ANGULAR_DRIVE_SCALE * distScale;
+              nextAngleByHand[h.label] = theta;
+              applyScratch = true;
+            }
+          }
+        } else {
+          const pf = prev.prevFingerByHand[h.label] ?? [fx, fy];
+          const fdx = (fx - pf[0]) * SCRUB_FINGER_ALPHA;
+          const fdy = (fy - pf[1]) * SCRUB_FINGER_ALPHA;
+          if (wasPinched) {
+            drive = scratchDrive(fdx, fdy);
+            applyScratch = true;
+          }
+          if (!wasPinched) {
+            nextAngleByHand[h.label] = null;
+          }
+        }
+
+        if (applyScratch) {
+          updateScratchDeltas(zone, layout, drive, sens, bestA, bestB, sawScratchA, sawScratchB);
+        }
+        intentBySide[h.side] = scrubIntent;
+        intentStrength[h.side] = Math.max(intentStrength[h.side], Math.min(1, Math.abs(drive) * 12));
+      } else if (!pinchOn) {
+        nextAngleByHand[h.label] = null;
+        intentBySide[h.side] = scrubIntent;
+        intentStrength[h.side] = Math.max(intentStrength[h.side], 0.15);
+      } else {
+        nextAngleByHand[h.label] = null;
+        intentBySide[h.side] = scrubIntent;
+        intentStrength[h.side] = Math.max(intentStrength[h.side], 0.12);
+      }
     } else {
+      clearDeckGestureState();
       nextDwell[h.label] = 0;
     }
+
+    nextPrevFinger[h.label] = [fx, fy];
+  }
+
+  for (const k of Object.keys(nextPinchByHand)) {
+    if (!labelsSeen.has(k)) delete nextPinchByHand[k];
+  }
+  for (const k of Object.keys(nextAngleByHand)) {
+    if (!labelsSeen.has(k)) delete nextAngleByHand[k];
+  }
+  for (const k of Object.keys(nextFistFrames)) {
+    if (!labelsSeen.has(k)) delete nextFistFrames[k];
+  }
+  for (const k of Object.keys(nextFistFired)) {
+    if (!labelsSeen.has(k)) delete nextFistFired[k];
   }
 
   let cross = prev.smooth.crossfader;
   if (crossDelta.length > 0) {
     const delta = crossDelta.reduce((a, b) => a + b, 0) / crossDelta.length;
-    const applied = Math.max(-CROSS_SLEW_MAX, Math.min(CROSS_SLEW_MAX, delta * CROSS_RELATIVE_SCALE));
-    const next = clamp01(prev.smooth.crossfader + applied);
-    cross = Math.abs(next - 0.5) <= CROSS_CENTER_SNAP ? 0.5 : next;
+    const absDelta = Math.abs(delta);
+    if (absDelta > CUT_VELOCITY_THRESHOLD) {
+      const target = delta > 0 ? 1 : 0;
+      cross = CUT_SNAP_ALPHA * target + (1 - CUT_SNAP_ALPHA) * prev.smooth.crossfader;
+    } else {
+      const applied = Math.max(-CROSS_SLEW_MAX, Math.min(CROSS_SLEW_MAX, delta * CROSS_RELATIVE_SCALE));
+      const next = clamp01(prev.smooth.crossfader + applied);
+      cross = Math.abs(next - 0.5) <= CROSS_CENTER_SNAP ? 0.5 : next;
+    }
   } else {
     const hasLaneOwner = Object.values(nextZones).some((z) => z !== null);
     const fallbackX = hasLaneOwner ? undefined : computeCrossfaderControlX(frame);
@@ -339,24 +584,26 @@ function mapFrameSpatial(
         )
       : prev.smooth.deckBGain;
 
-  const rawScratchA = sawScratchA.v ? scratchRateFromDrive(bestDriveA.v) : 1;
-  const rawScratchB = sawScratchB.v ? scratchRateFromDrive(bestDriveB.v) : 1;
-  const rawScrubVelA = sawScratchA.v ? scrubVelocityFromDrive(bestDriveA.v) : 0;
-  const rawScrubVelB = sawScratchB.v ? scrubVelocityFromDrive(bestDriveB.v) : 0;
+  const rawScratchA = sawScratchA.v ? scratchRateFromDrive(bestA.drive, bestA.sens) : 1;
+  const rawScratchB = sawScratchB.v ? scratchRateFromDrive(bestB.drive, bestB.sens) : 1;
+  const rawScrubVelA = sawScratchA.v ? scrubVelocityFromDrive(bestA.drive) : 0;
+  const rawScrubVelB = sawScratchB.v ? scrubVelocityFromDrive(bestB.drive) : 0;
 
+  const transportToggles = [...transportSet];
   const s = prev.smooth;
   const smooth = {
     crossfader: alpha * cross + (1 - alpha) * s.crossfader,
     deckAGain: alpha * gA + (1 - alpha) * s.deckAGain,
     deckBGain: alpha * gB + (1 - alpha) * s.deckBGain,
-    scratchRateA: smoothScratch(s.scratchRateA, rawScratchA, SCRATCH_ALPHA),
-    scratchRateB: smoothScratch(s.scratchRateB, rawScratchB, SCRATCH_ALPHA),
-    scrubVelocityA: smoothScratch(s.scrubVelocityA, rawScrubVelA, SCRATCH_ALPHA),
-    scrubVelocityB: smoothScratch(s.scrubVelocityB, rawScrubVelB, SCRATCH_ALPHA),
+    scratchRateA: smoothScratchBlend(s.scratchRateA, rawScratchA, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 1),
+    scratchRateB: smoothScratchBlend(s.scratchRateB, rawScratchB, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 1),
+    scrubVelocityA: smoothScratchBlend(s.scrubVelocityA, rawScrubVelA, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 0),
+    scrubVelocityB: smoothScratchBlend(s.scrubVelocityB, rawScrubVelB, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 0),
     handIntentLeft: intentBySide.left,
     handIntentRight: intentBySide.right,
     handStrengthLeft: smoothScratch(s.handStrengthLeft, intentStrength.left, SCRATCH_ALPHA),
     handStrengthRight: smoothScratch(s.handStrengthRight, intentStrength.right, SCRATCH_ALPHA),
+    transportToggles,
   };
 
   let left: HandPayload | undefined;
@@ -381,6 +628,10 @@ function mapFrameSpatial(
     prevWristByHand: nextPrevWrist,
     prevFingerByHand: nextPrevFinger,
     levelDwellByHand: nextDwell,
+    prevPlatterAngleByHand: nextAngleByHand,
+    pinchEngaged: nextPinchByHand,
+    fistFramesByHand: nextFistFrames,
+    fistFiredByHand: nextFistFired,
   };
 }
 
@@ -467,7 +718,8 @@ function mapFrameBodily(frame: FrameMessage, prev: MapperState, alpha: number): 
     if (h.side === "left") {
       sawLeft = true;
       const d = scratchDrive(dx, dy);
-      rawScratchA = scratchRateFromDrive(d);
+      const sens = dynamicScratchSens(fingerSpreadNorm(h));
+      rawScratchA = scratchRateFromDrive(d, sens);
       rawScrubVelA = scrubVelocityFromDrive(d);
       intentLeft = "scrubA";
       strengthLeft = Math.max(strengthLeft, Math.min(1, Math.abs(d) * 12));
@@ -475,7 +727,8 @@ function mapFrameBodily(frame: FrameMessage, prev: MapperState, alpha: number): 
     if (h.side === "right") {
       sawRight = true;
       const d = scratchDrive(dx, dy);
-      rawScratchB = scratchRateFromDrive(d);
+      const sens = dynamicScratchSens(fingerSpreadNorm(h));
+      rawScratchB = scratchRateFromDrive(d, sens);
       rawScrubVelB = scrubVelocityFromDrive(d);
       intentRight = "scrubB";
       strengthRight = Math.max(strengthRight, Math.min(1, Math.abs(d) * 12));
@@ -507,14 +760,15 @@ function mapFrameBodily(frame: FrameMessage, prev: MapperState, alpha: number): 
     crossfader: alpha * cross + (1 - alpha) * s.crossfader,
     deckAGain: alpha * gA + (1 - alpha) * s.deckAGain,
     deckBGain: alpha * gB + (1 - alpha) * s.deckBGain,
-    scratchRateA: smoothScratch(s.scratchRateA, rawScratchA, SCRATCH_ALPHA),
-    scratchRateB: smoothScratch(s.scratchRateB, rawScratchB, SCRATCH_ALPHA),
-    scrubVelocityA: smoothScratch(s.scrubVelocityA, rawScrubVelA, SCRATCH_ALPHA),
-    scrubVelocityB: smoothScratch(s.scrubVelocityB, rawScrubVelB, SCRATCH_ALPHA),
+    scratchRateA: smoothScratchBlend(s.scratchRateA, rawScratchA, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 1),
+    scratchRateB: smoothScratchBlend(s.scratchRateB, rawScratchB, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 1),
+    scrubVelocityA: smoothScratchBlend(s.scrubVelocityA, rawScrubVelA, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 0),
+    scrubVelocityB: smoothScratchBlend(s.scrubVelocityB, rawScrubVelB, SCRATCH_ALPHA, SCRATCH_RELEASE_ALPHA, 0),
     handIntentLeft: intentLeft,
     handIntentRight: intentRight,
     handStrengthLeft: smoothScratch(s.handStrengthLeft, strengthLeft, SCRATCH_ALPHA),
     handStrengthRight: smoothScratch(s.handStrengthRight, strengthRight, SCRATCH_ALPHA),
+    transportToggles: [],
   };
 
   return {
@@ -525,6 +779,10 @@ function mapFrameBodily(frame: FrameMessage, prev: MapperState, alpha: number): 
     prevWristByHand: nextPrevWrist,
     prevFingerByHand: nextPrevFinger,
     levelDwellByHand: {},
+    pinchEngaged: {},
+    prevPlatterAngleByHand: {},
+    fistFramesByHand: {},
+    fistFiredByHand: {},
   };
 }
 
@@ -534,11 +792,11 @@ function mapFrameBodily(frame: FrameMessage, prev: MapperState, alpha: number): 
 export function mapFrame(
   frame: FrameMessage,
   prev: MapperState,
-  alpha: number = EMA_ALPHA,
+  alpha?: number,
   spatialLayout: DeskLayoutForMapper | null = null,
   _relativeLevelMode: boolean = true,
 ): MapperState {
-  const a = alpha ?? EMA_ALPHA;
+  const a = alpha === undefined ? frameAlphaFromConfidence(frame) : alpha;
   if (isDeskLayoutComplete(spatialLayout) && frame.img_width > 0 && frame.img_height > 0) {
     return mapFrameSpatial(frame, prev, a, spatialLayout);
   }
