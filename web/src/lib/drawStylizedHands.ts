@@ -69,6 +69,7 @@ export function drawStylizedHand(
   hand: HandPayload,
   box: Letterbox,
   color: string,
+  pinchEngaged?: boolean,
 ): void {
   const lm = hand.landmarks;
   if (!lm?.length) return;
@@ -104,20 +105,21 @@ export function drawStylizedHand(
     cy,
     scale * 0.42,
   );
-  g.addColorStop(0, hexToRgba(color, 0.92));
-  g.addColorStop(0.55, hexToRgba(color, 0.72));
-  g.addColorStop(1, hexToRgba(color, 0.45));
+  const fillBoost = pinchEngaged ? 1.12 : 1;
+  g.addColorStop(0, hexToRgba(color, Math.min(0.99, 0.92 * fillBoost)));
+  g.addColorStop(0.55, hexToRgba(color, Math.min(0.95, 0.72 * fillBoost)));
+  g.addColorStop(1, hexToRgba(color, Math.min(0.88, 0.45 * fillBoost)));
   ctx.fillStyle = g;
   ctx.fill();
 
   ctx.strokeStyle = hexToRgba(color, 0.55);
   ctx.lineWidth = edgeW * 2;
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = pinchEngaged ? 0.5 : 0.35;
   ctx.stroke();
 
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = edgeW;
-  ctx.globalAlpha = 0.9;
+  ctx.globalAlpha = pinchEngaged ? 0.98 : 0.9;
   ctx.stroke();
 
   ctx.restore();
@@ -131,11 +133,13 @@ export function drawAllHandsStylized(
   imgW: number,
   imgH: number,
   handColors: { left: string; right: string },
+  pinchEngagedForLabel?: Record<string, boolean>,
 ): void {
   ctx.clearRect(0, 0, canvasW, canvasH);
   const box = letterboxRect(canvasW, canvasH, imgW, imgH);
   for (const h of hands) {
     const c = h.side === "left" ? handColors.left : handColors.right;
-    drawStylizedHand(ctx, h, box, c);
+    const engaged = pinchEngagedForLabel?.[h.label] ?? false;
+    drawStylizedHand(ctx, h, box, c, engaged);
   }
 }

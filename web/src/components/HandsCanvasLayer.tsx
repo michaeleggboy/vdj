@@ -7,13 +7,15 @@ type Props = {
   frame: FrameMessage | null;
   /** e.g. `hands-canvas-layer--viewport` for full-window overlay above top chrome */
   className?: string;
+  /** Spatial pinch state per tracked hand label (brighter silhouette when engaged). */
+  pinchEngagedByLabel?: Record<string, boolean>;
 };
 
 /**
  * Letterboxed hand silhouettes in camera space. Use the viewport variant so strokes sit above
  * the top bar (calibration / theme); `pointer-events: none` keeps controls clickable underneath.
  */
-export function HandsCanvasLayer({ frame, className }: Props) {
+export function HandsCanvasLayer({ frame, className, pinchEngagedByLabel }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [layoutGen, setLayoutGen] = useState(0);
@@ -55,8 +57,8 @@ export function HandsCanvasLayer({ frame, className }: Props) {
     drawAllHandsStylized(ctx, frame.hands, w, h, iw, ih, {
       left: handLeftHex,
       right: handRightHex,
-    });
-  }, [frame, layoutGen, handLeftHex, handRightHex]);
+    }, pinchEngagedByLabel);
+  }, [frame, layoutGen, handLeftHex, handRightHex, pinchEngagedByLabel]);
 
   const rootClass = ["hands-canvas-layer", className].filter(Boolean).join(" ");
 
