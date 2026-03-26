@@ -2,6 +2,12 @@
 
 Browser UI for a **virtual DJ surface** driven by **hand tracking** from a local Python service. Video from your webcam is processed on your machine only (not uploaded).
 
+## Preview
+
+![vdj pads layout: deck jog columns, CH A / CH B readouts, and crossfader strip](docs/images/vdj-desk-preview.png)
+
+_Stylized mockup of the main desk._ For a **pixel-accurate** promo, record a short screen capture and swap in a **GIF** or **MP4** (e.g. replace this block with `![demo](docs/images/demo.gif)` or link a video on GitHub Releases / your host). On GitHub, MP4 can be embedded with HTML: `<video src="…" …></video>` in the readme if you prefer.
+
 ## Architecture
 
 1. **`hand_service/`** — Opens the camera, runs a **minimal vendored** JARVIS hand stack under [`hand_service/vendor/jarvis/`](hand_service/vendor/jarvis/) (see [`hand_service/vendor/README.md`](hand_service/vendor/README.md)), and streams JSON over **WebSocket** (default `ws://127.0.0.1:8765`). The port speaks **WebSocket only**—do not open `http://127.0.0.1:8765` in a browser tab (you’ll get a plain HTTP response, not a page). Use the **vdj web app**, which connects with `ws://`.
